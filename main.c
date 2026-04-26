@@ -23,8 +23,6 @@ typedef struct {
     char desc[100];
 } REPORT_T;
 
-
-
 void parse_arguments(int argc, char **argv){
     if (argv[1][0] != '-') exit(1);
     if (argv[1][0] != '-') exit(1);
@@ -72,7 +70,7 @@ int main(int argc, char **argv) {
     printf("role: %s; user: %s; operation: %s; d_id: %s; r_id: %d", role, user, operation, d_id, r_id);
 
     if (strcmp(operation, "--add") == 0) {
-        
+
     }
     else if (strcmp(operation, "--list") == 0) {
     
