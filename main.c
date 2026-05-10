@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 #define PERM_DISTRICT_DIR   0750   
 #define PERM_REPORTS_DAT    0664   
@@ -563,9 +564,78 @@ static void parse_arguments(int argc, char **argv) {
             strncpy(filter_conditions[conditions++], argv[i++],
                     sizeof(filter_conditions[0]) - 1);
         }
-    } else {
+    } else if (strcmp(op_flag, "--remove_district") == 0) {
+        strcpy(operation, "remove_district");
+        if (i >= argc) {
+            fprintf(stderr, "--remove_district requires <district>\n");
+            exit(1);
+        }
+        strncpy(district_id, argv[i++], sizeof(district_id) - 1);
+    }
+    else {
         fprintf(stderr, "Unknown operation: %s\n", op_flag);
         exit(1);
+    }
+}
+
+static void op_remove_district(void) {
+    if (strcmp(role, "manager") != 0) {
+        fprintf(stderr, "ERROR: remove_district requires manager role.\n");
+        return;
+    }
+
+    if (strlen(district_id) == 0 ||
+        strchr(district_id, '/') != NULL ||
+        strcmp(district_id, ".")  == 0 ||
+        strcmp(district_id, "..") == 0) {
+        fprintf(stderr, "ERROR: invalid district_id '%s'.\n", district_id);
+        return;
+    }
+
+    struct stat st;
+    if (stat(district_id, &st) != 0) {
+        fprintf(stderr, "ERROR: district '%s' does not exist.\n", district_id);
+        return;
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "ERROR: '%s' is not a directory.\n", district_id);
+        return;
+    }
+
+    printf("Removing district '%s'...\n", district_id);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork");
+        return;
+    }
+
+    if (pid == 0) {
+        execl("/bin/rm", "rm", "-rf", district_id, (char *)NULL);
+        perror("execl rm");
+        exit(1);
+    }
+
+    int status;
+    if (waitpid(pid, &status, 0) < 0) {
+        perror("waitpid");
+        return;
+    }
+
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        printf("District directory '%s' deleted.\n", district_id);
+    } else {
+        fprintf(stderr, "ERROR: rm -rf failed (exit status %d).\n",
+                WEXITSTATUS(status));
+        return;
+    }
+
+    char symlink_name[256];
+    path_symlink(symlink_name, sizeof(symlink_name), district_id);
+    if (unlink(symlink_name) == 0) {
+        printf("Symlink '%s' removed.\n", symlink_name);
+    } else if (errno != ENOENT) {
+        perror("unlink symlink");
     }
 }
 
@@ -590,7 +660,8 @@ int main(int argc, char **argv) {
         op_update_threshold();
     } else if (strcmp(operation, "filter") == 0) {
         op_filter();
+    } else if (strcmp(operation, "remove_district") == 0) {
+        op_remove_district();
     }
-
     return 0;
 }
